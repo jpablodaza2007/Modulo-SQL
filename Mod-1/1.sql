@@ -1,222 +1,119 @@
---Creacion base de datos--
-CREATE DATABASE firstdb;
-
---Asignacion de permisos--
-GRANT ALL ON firstdb.*
-TO guru2b@localhost
-IDENTIFIED BY 'contraseña';
-
---Creacion de la Tabla--
-CREATE TABLE sales_rep(
-employee_number INT,
-surname VARCHAR(40),
-first_name VARCHAR(30),
-commission TINYINT
+CREATE DATABASE escuela_psql;
+\c escuela_psql;
+CREATE TABLE estudiantes (
+id SERIAL PRIMARY KEY,
+nombre VARCHAR(50) NOT NULL,
+edad INT CHECK (edad BETWEEN 15 AND 60),
+email VARCHAR(100) UNIQUE,
+fecha_nacimiento DATE,
+direccion VARCHAR(100)
 );
 
---Insertar un dato a la Tabla--
-INSERT INTO sales_rep
-VALUES
-(1,'Rive','Sol',10);
+CREATE TABLE cursos (
+codigo VARCHAR(10) PRIMARY KEY,
+nombre VARCHAR(100) NOT NULL,
+creditos INT CHECK (creditos > 0),
+profesor VARCHAR(50)
+);
 
---Insertar varios datos a la Tabla --
-INSERT INTO sales_rep
-VALUES
-(1,'Rive','Sol',10),
-(2,'Gordimer','Charlene',
-15);
+CREATE TABLE matriculas (
+id SERIAL PRIMARY KEY,
+estudiante_id INT REFERENCES estudiantes(id) ON DELETE CASCADE,
+curso_codigo VARCHAR(10) REFERENCES cursos(codigo) ON DELETE CASCADE,
+fecha DATE DEFAULT CURRENT_DATE,
+calificacion DECIMAL(3,1) CHECK (calificacion BETWEEN 0 AND 10),
+UNIQUE(estudiante_id, curso_codigo)
+);
 
---Carga desde el archivo--
-LOAD DATA LOCAL
-INFILE
-'datos.txt' INTO TABLE
-sales_rep;
+INSERT INTO estudiantes (nombre, edad, email) VALUES
+('Ana Torres', 20, 'ana@email.com'),
+('Luis Mendoza', 22, 'luis@email.com'),
+('Marta Rojas', 19, 'marta@email.com'),
+('Carlos Pérez', 21, 'carlos@email.com'),
+('Sofia García', 23, 'sofia@email.com');
 
---Metodo where
-SELECT commission
-FROM sales_rep
-WHERE surname='Gordimer';
+INSERT INTO cursos VALUES
+('MATE101', 'Álgebra Lineal', 4, 'Prof. Ramírez'),
+('PROG201', 'Programación I', 5, 'Ing. Fernández'),
+('FIS150', 'Física General', 4, 'Dr. Martínez'),
+('QUIM101', 'Química Básica', 3, 'Dra. López');
 
---otros metodos de consulta
-WHERE surname LIKE 'Sero%'
-WHERE surname LIKE '%se%'
-WHERE surname LIKE '%ote'
+INSERT INTO matriculas
+(estudiante_id, curso_codigo, calificacion) VALUES
+(1, 'MATE101', 8.2),
+(1, 'PROG201', 9.1),
+(2, 'MATE101', 7.5),
+(2, 'FIS150', 8.8),
+(3, 'PROG201', 9.3);
 
---Ordenar de manera asendiente
-SELECT * FROM sales_rep
-ORDER BY surname ASC,
-first_name ASC;
+SELECT 'Estudiantes' AS tabla, COUNT(*) AS registros FROM estudiantes
+UNION ALL
+SELECT 'Cursos', COUNT(*) FROM cursos
+UNION ALL
+SELECT 'Matrículas', COUNT(*) FROM matriculas;
 
---Ordenar de manera desendiente
-SELECT * FROM sales_rep
-ORDER BY commission DESC;
-
---Calculando edades por precision
-SELECT
-surname,
-first_name,
-(YEAR(CURRENT_DATE) - YEAR(birthday))
-- (RIGHT(CURRENT_DATE,5) < RIGHT(birthday,5))
-AS age
-FROM sales_rep;
-
---Update y delate
-UPDATE sales_rep
-SET commission = 12
-WHERE employee_number=1;
-
-DELETE FROM sales_rep
-WHERE employee_number = 5;
-
-ALTER TABLE sales_rep
-ADD date_joined DATE;
+SELECT nombre, edad
+FROM estudiantes
+WHERE edad > 20;
 
 SELECT
-first_name,
-surname,
-value
-FROM sales_rep, sales
-WHERE sales.sales_rep = sales_rep.employee_number
-AND first_name='Sol'
-AND surname='Rive'; 
+    e.nombre AS estudiante,
+    c.nombre AS curso,
+    m.calificacion
+FROM matriculas m
+JOIN estudiantes e ON m.estudiante_id = e.id
+JOIN cursos c ON m.curso_codigo = c.codigo;
+
+SELECT AVG(edad) AS promedio_edad FROM estudiantes;
+SELECT curso_codigo, COUNT(*) AS total_estudiantes
+FROM matriculas
+GROUP BY curso_codigo;
 
 SELECT
-sales_rep,
-SUM(value) AS total
-FROM sales
-GROUP BY sales_rep
-ORDER BY total DESC;
+AVG(calificacion) AS promedio,
+MAX(calificacion) AS maxima,
+MIN(calificacion) AS minima,
+STDDEV(calificacion) AS desviacion_estandar,
+VARIANCE(calificacion) AS varianza
+FROM matriculas;
 
-CREATE TABLE products(
-id INT UNSIGNED,
-code INT(6) ZEROFILL
-);
+SELECT
+    estudiante_id,
+    curso_codigo,
+    calificacion,
+    AVG(calificacion) OVER (
+        PARTITION BY estudiante_id
+        ORDER BY fecha
+        ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+    ) AS promedio_movil
+FROM matriculas
+ORDER BY estudiante_id, fecha;
 
-gender ENUM('M','F','Other')
+SELECT CORR(edad, calificacion) AS correlacion_edad_calificacion
+FROM estudiantes e
+JOIN matriculas m ON e.id = m.estudiante_id;
 
-skills SET('PHP','MySQL','Java')
+SELECT
+    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY calificacion) AS p25,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY calificacion) AS p50,
+    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY calificacion) AS p75
+FROM matriculas;
 
-SELECT DATE_FORMAT(date_joined, '%W, %M %d, %Y')
-FROM sales_rep;
+SELECT
+    e.id AS estudiante_id,
+    e.edad,
+    c.creditos,
+    m.calificacion,
+    CASE WHEN m.calificacion >= 7 THEN 'aprobado' ELSE 'reprobado' END AS resultado
+FROM estudiantes e
+JOIN matriculas m ON e.id = m.estudiante_id
+JOIN cursos c ON m.curso_codigo = c.codigo
+WHERE m.calificacion IS NOT NULL;
 
-mysql -H -e "SELECT * FROM users"
-
-mysql -E -e "SELECT * FROM users"
-
---"DELETE FROM users;" - ¡Elimina TODA la tabla!
-
---Con Modo Seguro "ERROR 1175: Debes usar WHERE con una clave"
-
-mysql --safe-updates -u root -p
-
---Esta opción es especialmente valiosa para administradores que ejecutan
---mantenimientos en producción o para usuarios que están aprendiendo y son
---propensos a errores costosos.
-
-mysql --pager=less
-
-EXPLAIN SELECT * FROM sales_rep
-WHERE surname = 'Rive';
-
-START TRANSACTION;
-UPDATE accounts SET balance = balance - 100
-WHERE account_id = 1;
-UPDATE accounts SET balance = balance + 100
-WHERE account_id = 2;
-COMMIT;
-
-CREATE USER 'developer'@'localhost'
-IDENTIFIED BY 'secure_password';
-GRANT SELECT, INSERT, UPDATE ON myapp.*
-TO 'developer'@'localhost';
-FLUSH PRIVILEGES;
-
-CREATE TABLE orders (
-order_id INT PRIMARY KEY AUTO_INCREMENT,
-customer_id INT NOT NULL,
-order_date DATE,
-FOREIGN KEY (customer_id)
-REFERENCES customers(id)
-ON DELETE RESTRICT
-ON UPDATE CASCADE
-);
-
-SELECT name, salary
-FROM employees
-WHERE salary > (
-SELECT AVG(salary)
-FROM employees
-);
-
-SELECT name FROM customers
-WHERE id IN (
-SELECT customer_id
-FROM orders
-WHERE total > 1000
-);
-
-SELECT name FROM customers c
-WHERE EXISTS (
-SELECT 1 FROM orders o
-WHERE o.customer_id = c.id
-AND o.total > 1000
-);
-
-SELECT name, 'Customer' as type FROM customers
-UNION
-SELECT name, 'Employee' as type FROM employees
-ORDER BY name;
-
-CREATE VIEW high_value_customers AS
-SELECT c.name, c.email, SUM(o.total) as lifetime_value
-FROM customers c
-JOIN orders o ON c.id = o.customer_id
-GROUP BY c.id
-HAVING lifetime_value > 5000;
-
-SELECT name,
-IF(salary > 50000,
-'High',
-'Normal') as level
-FROM employees;
-
-SELECT name,
-CASE
-WHEN salary > 70000 THEN 'Senior'
-WHEN salary > 50000 THEN 'Mid'
-ELSE 'Junior'
-END as level
-FROM employees;
-
-SELECT * FROM products
-WHERE name REGEXP '^[A-Z].*Pro$';
-
-SET @total = 0;
-SELECT @total := @total + price as running_total, product
-FROM orders
-ORDER BY order_date;
-
-DELIMITER //
-
-CREATE PROCEDURE GetCustomerOrders(IN
-customer_id INT)
-BEGIN
-SELECT * FROM orders
-WHERE customer_id = customer_id;
-END //
-
-DELIMITER ;
-CALL GetCustomerOrders(42);
-
-CREATE TABLE orders (
-id INT,
-order_date DATE,
-...
-) PARTITION BY RANGE (YEAR(order_date)) (
-PARTITION p2020 VALUES LESS THAN (2021),
-PARTITION p2021 VALUES LESS THAN (2022),
-PARTITION p2022 VALUES LESS THAN (2023),
-PARTITION p2023 VALUES LESS THAN MAXVALUE
-);
-
-
+SELECT
+DATE_TRUNC('month', fecha) AS mes,
+AVG(calificacion) AS promedio_calificacion,
+COUNT(*) AS total_matriculas
+FROM matriculas
+GROUP BY mes
+ORDER BY mes;
